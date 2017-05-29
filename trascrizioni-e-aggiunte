@@ -1,0 +1,952 @@
+mongodbitalia.it
+
+[Introduzione database nosql]
+I database nosql nascono per risolvere un problema particolare
+entrambi lavoravano nell'azienda doubleclick
+e quindi serviva sapere la nazionalità, la provincia e comunque l'enorme quantità di dati che poteva essere generata, il quantitativo di dati aumentava e i database relazionali non riescono a risolere
+
+Il principale problema che viene risolto à la scalabilità, quindi ci riferiamo anche ai "Big Data"
+
+Il secondo obiettivo è facilitare lo sviluppo
+
+il terzo obiettivo è quello di avere una rappresentazione di dati intuitiva, rappresentar edati complessi.
+Esempio possiamo immaginare i dati semistrutturati come un documento XML con una struttura interna non fissa e quindi può essere modificata.
+I dati non strutturati sono i files.
+Deve supportare anche il polimorfismo con i dati, proprio come accade nella programmazione a oggetti, ma questo lo approfondiremo successivamnete
+
+
+Conosciamo i creatori, conosciamo gli obiettivi, adesso parliamo di scalabilità verticale e orizzontale.
+La scalabilità verticale: immaginiamo di avere un piccolo server dove mettiamo un sito appena creato, man mano che mettiamo visitatori il sito continua a crescere e acquistiamo un server medio, poi cresce ancora e dobbiamo acquistare un server super. Questa crescita costante è la scalabilità verticale ovvero piccolo,medio,grande server.
+
+La scalabilità orizzontale: immaginiamo di avere un mini server man mano che il sito cresce noi necessitiamo di più potenza, ma non andremo ad acquistare un server più potente da sostiutire al nostro, andremo a comprare un altro mini server; collegando tra loro 10 mini server abbiamo un "server medio" che ci fa avere una reale scalabilità, in qualsiasi momento possiamo regolare la quantità dei server nel sistema. Soddisfando le stesse richieste di un server medio o addirittura di uno grande.
+In base alle esigenze togliamo o aggiungiamo server in base alle nostre esigenze, questo è un vantaggio enorme per i costi.
+Altri vantaggi sono, senza entrare troppo nel tecnico:
+ - fail-hover: se una macchina smette di funzionare le sue attività vengono indirizzate verso un'altra macchina attiva
+ - alta disponibilità: assicura la disponibilità del servizio durante varie tipologie di failure
+ - disaster recovery: garantire un'erogazione continua dei servizi, RPO(recovery point objective)
+
+La scalabilità orizzontale è nettamente migliore di quella verticale, ma il problema nasce dal punto di vista pratico quando tutti questi server devono comunicare, scambiarsi informazioni e soprattutto essere veloci.
+
+MongoDB cerca di darci tutti gli strumenti che ci servono per poter distribuire la nostra base di dati su più server, soddisfando a pieno il suo obiettivo principale: la scalabilità
+
+Vediamo come si pone MongoDB nel mondo dei database
+MongoDB si pone strategicamente tra Cassandra("wide column") e i "key/value stores".
+Risulterà molto alta la stabilità verso i "key/value store" e man mano decrescerà fino ad arrivare agli eredi RDBMS
+cerca una sorta di equilibrio, vediamo che è ricco di funzionalità senza rinunciare alle performances e alla scalabilità
+
+Se fosse così facile lo avrebbero fatto tutti i database relazionali? Non è così semplice, nel tratto di funzionalità tra MongoDB e gli RDBMS manca qualcosa... MongoDB ha dovuto riunciare a qualcosa per essere in quella posizione e ha rinunciato alle JOIN e alle Transactions.
+Per chi non ha mai avuto il piacere di usare le transaction: si intende una sequenza di operazioni che possono concludersi con evento di successo detto commit e con un evento di insuccesso detto rollback.
+
+Un database senza join e transaction? Sembrerebbe impossibile, ma MongoDB offre un approccio più intuitivo e più creativo
+
+---
+[Join e Transaction]
+
+Vediamo perché effettivamente mancano le join e le transaction e quale alternativa ci offre MongoDB
+per chi viene dai DB relazionali ciò è inconcepibile, vediamo perché effettivamente non le supporta.
+
+Facciamo uno sforzo di fantasia e immaginiamo il nostro DB classico in un ambiente distribuito ossia in un insieme di server collegati tra loro, la prima domanda che sorge spontanea è: con quale criterio si distribuiscono le tabelle nei vari servers? e come faccio a fare le join una volta che queste sono state distribuite?
+Qualcuno potrebbe rispondere in modo classico: mettendo tutte le tabelle in tutti i server, così da supportare i join, questo però in realtà non è scalabilità.
+Qualcun'altro potrebbe pensare di dividere le tabelle più grandi su più server e quelle più piccole su più server, un po' come fa lo "star schema"( https://it.wikipedia.org/wiki/Schema_a_stella ), è vero che è una soluzione scalabile che supporta le join, ma c'è un piccolo problema: lo star schema parte dal presupposto che noi abbiamo un'unica tabella grande, ma questo non è applicabile a tutte le situazioni! Noi possiamo avere più tabelle grandi da voler dividere, quindi lo star schema non è applicabile.
+
+Inoltre dividendo le varie tabelle sui server dobbiamo ricordarci che una query join coinvolgerà probabilmente più server, quindii tempi di attesa per avere un risultato aumenteranno!
+Se quando effettuo una join le tabelle che andrò richiamando sono distribuite solo su due server, può andarmi anche bene e la query potrebbe risultare veloce... ma poiché siamo in un sistema scalabile, possiamo avere 2,20 o 30 server coinvolti e in questo caso possiamo avere tempi di attesa secolari.
+Se con le join c'è qualche difficoltà, proviamo a pensare a quei rari casi in cui abbiamo usato le transactions! Sono sicuramente molto utili in un ambiente relazionale, ma proviamo a immaginarle in un ambiente distribuito: dobbiamo considerare gli eventi di commit e di rollback su TUTTI i server coinvolti senza dimenticare che sono soggetti alle proprietà ACID(Atomicità, Consistenza, Isolamento e Durabilità) e ovviamente ai tempi di attesa.
+
+Insomma diventa molto complicato implementare le join e le transactions in un ambiente distribuito e ciò non è solo un problema di MongoDB ma di tutti i DBMS che vogliono davvero essere scalabili
+
+Immaginiamo che tra i due creatori di MongoDB ci sia stata una conversazione di questo tipo...
+
+Abbiamo quindi visto che ci sono dei reali problemi pratici negli ambienti distribuzioni nell'applicare queste funzioni e poiché il principale obiettivo di MongoDB è la scalabilità ha dovuto per forza eliminare queste due funzionalità.
+Ma usare un database senza join all'inizio non è facile, immaginiamo quindi qual è stato il percorso, l'approccio di MongoDB per creare comunque qualcosa di utile e potente.
+
+
+Pensiamo ai database relazionale: le join sono essenziali, senza è impossibile creare qualcosa di meglio, quindi dobbiamo sicuramente cambiare l'approccio ( Different Data Model ), ci serve qualcosa che sia potente, agile e flessibile.
+Possibile soluzione: ci sarebbero i "key/value store" ovvero set(k,v) e get(k,v) però sono troppo semplici e non offrono molte funzionalità, servirebbe qualcosa di più, come ad esempio il "Document-oriented" in cui i singoli record sono memorizzati come documenti.
+Precisiamo cosa si intende con documento: il termine documento si utilizza quando si parla di database ed equivale a un oggetto nel campo della programmazione, quindi dire Oggetto o dire Documento, sostanzialmente è la stessa cosa, abbiamo quindi una corrispondenza diretta tra la programmazione a oggetti e i dati presenti nel database, che rende il "Document-Oriented" molto agile e molto flessibile in modo che le aziende possono adattarsi ai cambiamenti in modo molto facilmente.
+
+Ci manca solo la codifica, è ovviamente JSON in quanto è familiare(umanamente leggibile al contrario dell'XML) ed è una codifica indipendente e ha anche il suo standard.
+
+Adesso abbiamo tutto quello che ci serve per risolvere il problema delle JOIN, ovvero con le PRE-JOIN chiamate anche EMBEDDING chiamate anche INCAPSULAZIONE/DENORMALIZZAZIONE, chiamatele come volete.
+Essenzialmente il concetto è questo: quando noi effettuamo una join tra due tabelle ci aspettiamo che i dati vengano uniti in un unico risultato e fin qui è semplice. Le pre-join usano il processo inverso, partendo dal risultato joint, cioè già prima di salvare nel database il nostro dato, noi includiamo al suo interno anche altre informazioni, un po' come se fosse il risultato di una join.
+
+Passiamo a un esempio pratico, siamo in un database relazionale abbiamo due tabelle:
+ - tabella clienti dove ogni riga è un cliente
+ - tabella veicoli abbiamo la lista dei diversi veicoli con una chiave esterna per identificarne il proprietario
+con una normalissima join possiamo ottenere tutti i veicoli per ogni cliente
+
+Cosa ci propone MongoDB? Non avendo le join, dobbiamo unire le informazioni già prima di salvare il dato nel database.
+Proviamo a fare l'esempio di Alberto, creiamo un array di oggetti di veicoli dove ogni oggetto è un veicolo, ognuno con i suoi attributi.
+In questo modo non ci servirà più una tabella veicoli in quanto le informazioni sono già incluse in quelle di ogni proprietario di veicoli!
+Inoltre risulta anche molto più leggibile
+Abbiamo unito i dati di due tabelle all'interno di un solo documento che contiene tutte le informazioni che vogliamo.
+
+Possiamo inserire tutto ciò che vogliamo per questo cliente.
+Se vogliamo inserire un nuovo cliente dobbiamo creare un nuovo documento che ha una struttura simile a questa.
+In questo modo assicuriamo a MongoDB delle ottime performances, con una semplice query di selezione ottiamo lo stesso risultato che avremmo con un {merging/enjoing}*** relazionale.
+
+---
+[MongoDB in un app]
+
+Abbiamo detto che MongoDB è un database non relazionale, orientato agli oggetti, che usa una codifica JSON/BSON
+MongoDB è schemaless, ovvero senza schema. Per essere più precisi lo schema è dinamico ovvero può essere modificata in qualsiasi momento( se volessimo aggiungere qualche attributo in più, non dovremmo fare altro che aggiungere una nuova lista di stringhe).
+Questo passaggio così banale, è fortemente innovativo! Se fossimo in un DB relazionale avremmo dovuto creare due nuove tabelle che potrebbero essere inutili per alcune entità.
+La flessibilità di MongoDB ci consente di avere attributi diversi per ogni tipo di documento, cosa impensabile nei database relazionali!
+
+
+Poiché abbiamo detto che l'obiettivo base di MongoDB deve essere la scalabilità, gli strumenti per sfruttarla sono:
+ - replication: la replica fisica dei dati tra un server primario e server secondari, mongodb si preoccupa di tenere i dati sincronizzati e nel caso in cui il server primario risulti irraggiungibile, elegge automaticamente un server secondario il quale prenderà il suo posto
+ - auto-sharding: lo sharding deriva da shard, frammento/scheggia. Lo sharding ci consente di separare il nostro database su più server e sarà MongoDB stesso a distribuire i carichi e a tenerli costantemente bilanciati!
+
+Inoltre MongoDB è ricco di funzionalità, tra cui:
+ - indici di ricerca(Text-search): 
+ - Aggregazione del risultato:
+ - Query Geospaziali: 
+ - il map reduce:
+
+
+In realtà in MongoDB non esiste la "tabella" come la conosciamo nel database relazionale, ecco la nuova terminologia:
+ - database continueremo a chiamarlo database
+ - tabella vengono ribattezzate "collezione"/"collection"
+ - le righe delle tabelle vengono chiamate document o oggetti
+ - gli indici di ricerca restano uguali, ci consentono di recuperare più velocemente i dati di una collection evitando una rilettura del documento
+ - le join non esistono, abbiamo le pre-join o comunque le Embedded document
+ - Foreing Key non esistono chiavi esterne, non c'è un vero meccanismo per gestirle, però nulla ci vieta di usare dei riferimenti
+
+quindi utilizzando un linguaggio appropriato per MongoDB, possiamo definire che: un database non è altro che un insieme di collection e una collection non è altro che un insieme di document
+
+Come si posiziona MongoDB in un'applicazione?
+L'applicazione avrà sicuramente bisogno di accedere al database, è qui che entra in gioco MongoDB il quale è dotato di una shell amministrativa, è separata dall'applicazione e per far comunicare l'app con la shell di MongoDB serve un driver apposito del linguaggio che stiamo utilizzando per poter lanciare le interrogazioni del database direttamente dalle nostre applicazioni.
+MongoDB utilizza il JSON esclusivamente quando deve mostrare qualcosa a video, bensì i dati vengono salvati in forma binaria per questione di storage e performance, convertendoli in BSON ovvero Binary-SON; è un procedimento che fa in automatico, a noi non cambia nulla. Il BSON lo usa sul server quando deve comunicare tra il database e l'applicazione, JSON viene adoperato invece per essere mostrato dalla shell all'utente.
+Il server MongoDB restituisce il BSON il quale viene allocato direttamente in RAM, quando viene poi passato al driver in attesa di risposta, non viene subito convertito in JSON bensì nella struttura dati nativa del linguaggio che stiamo utilizzando(es. php, nodejs, in array o se stiamo usando python verrà convertito in un oggetto).
+MongoDB possiamo interrogarlo tramite:
+ - la shell amministrativa: console a riga di comando, con un interprete javascript per interrogare direttamente il database. È utilissima per eseguire test.
+ - i drivers: componenti dei linguaggi di programmazione per collegarsi al database MongoDB
+
+---
+[Come installare MongoDB]
+google: MongoDB download e andiamo su un risultato organico(non sulla pubblicità) e scarichiamo la versione attuale(3.0.6)
+
+Per fare dei test si potrebbe usare anche la versione a 32bit, ma ha delle limitazioni per quanto riguarda la grandezza delle collections
+ed è assolutamente sconsigliata per la produzione
+
+mongo è la shell amministrativa
+mongod è per il server
+
+prima di poterli usare su windows, dobbiamo impostarli come path di sistema.(windows: sistema-> proprietà del sistema->variabili d'ambiente->path e aggiungiamo alla fine del testo il percorso degli eseguibili di MongoDB, alla fine scriviamo il punto e virgola)
+adesso possiamo lanciare gli eseguibili di mongodb direttamente dal prompt di comandi di windows (es. mongo --version )
+
+Iniziamo facendo delle prove su windows, creiamo sul desktop una cartella di nome "db"
+Lanciamo il server: mongod --dbpath C:\Users\Alberto\Desktop\db
+il server è partito e resta in esecuzione finché non chiudiamo la finestra, il server è in ascolto sulla porta di default 27017 e che per i dati usa la cartella che abbiamo specificato, in cui crea nche files di log
+apriamo un'altra shell e scriviamo: mongo
+tenterà di collegarsi automaticamene su localhost sulla porta 27017
+ovviamente la shell funziona perché la shell del server è aperta.
+
+mongod --dbpath C:\Users\Alberto\Desktop\db
+in ambiente di prodozione sicuramente possiamo aggiungere:
+ --fork che mantiene il processo aperto anche dopo aver chiuso la finestra
+ --logfile specificano un percorso in cui salvare un file di log
+
+comando [mongo]
+usando:
+ - db possiamo vedere l'elenco dei databse
+ - show dbs mostra lo spazio
+ - use demo se non dovesse esistere il database, tenta di crearlo al momento del comando di utilizzo
+Proviamo quindi dopo aver specifiato "use demo" digitiamo db.animals.find() dove db è un oggetto speciale all'interno della shell che identifica il nostro database, animals è il nome della collections che ovviamente ancora non esiste e find() è il comando che equivale a una select quindi è una ricerca.
+Vai a prendere il database in uso, considera la collection animals e cerca tra tutti gli oggetti al suo interno.
+Ovviamente il risultato non esiste, dato che la collection è vuota
+
+Proviamo a inserire un animale: db.animals.insert({name:"delfino", color:"grigio", ocean:["atlantico", "pacifico", "indiano"]}) ricordiamoci che tutti gli oggetti JSON devono essere tra le parentesi graffe
+usando adesso: db.animals.find() ci restituirà qualcosa
+Prima la collection era vuota, ed essendo vuota non poteva restituire nulla.
+È stato inserito automaticamnete l'attributo speciale _id di tipo ObjectId, è un attributo speciale che viene inserito automaticamente da MongoDB quando non viene specificato durante l'inserimento.
+proviamo a inserire un nuovo documento JSON: db.animals.insert( {name:"pantera", color:"nero"} );
+Attenzione alla sintassi, ogni elemento JSON deve avere necessariamente una chiave e un valore.
+
+Proviamo a inserire qualcosa di più complesso, ad esempio in quali zoo la possiamo trovare, facciamo un array di sottodocumenti dove ognuno è un indirizzo di uno zoo diverso:
+db.animals.insert( { name:"pantera", color:"nero", zoos:[{name:"Zoo di Dublino", address:{street:"Phoenix park, Dublino 8", city:"Dublino", country:"Irlanda"}}]});
+
+vediamo come si presenta la nostra collection
+quando usiamo find, possiamo mettere delle condizioni sempre in formato JSON, esempio: db.animals.find( {name:"pantera"} );
+in questo modo cercherà tutti i documenti in cui la chiave name corrisponde al valore "pantera"
+per leggerlo più correttamente, scriviamo: db.animals.find( {name:"pantera"} ).pretty();
+
+oppure un'altra prova: db.animals.findOne( {name:"pantera"} );
+findOne() a differenza di find() restituisce un solo documento
+ricordiamoci che siamo in javascript, quindi possiamo scrivere:
+var p = db.animals.findOne( {name:"pantera"} );
+e possiamo quindi scrivere p.lengs = 4
+inserirà un nuovo attributo alla nostra pantera.
+Per salvare la modifica dobbiamo usare la funzione save: db.animals.save(p);
+vediamo il risultato: db.animals.find( {name:"pantera"} ).pretty();
+
+La funzione save() non viene molto utilizzata, è una sorta di scorciatoia che corrisponde sia all'UPDATE sia all'INSERT.
+
+Se scriviamo: db.animals.save senza le parentesi, MongoDB ci mostra il codice della funzione stessa, se esiste il _id allora lo sovrascrive altrimenti lo crea.
+
+Per vedere la lista di tutti i comandi disponibili possiamo usare: help
+o addirittura db.help()
+possiamo usarlo anche per le collection( db.mycol.help() ), per lo sharding(sh.help()) o per il "replica set"(rs.help())
+un altro comando molto utile è: show per mostrare db o collezioni
+
+----
+[JSON e BSON]
+Il JSON non è l'unica codifica o linguaggio orientato ai documenti, c'è anche l'XML il suo fratellastro brutto.
+L'XML tende a essere più pesante nelle interpretazioni e anche nel parsing e umanamente è meno leggibile
+JSON è altamente e decisamente più leggibile dell'XML
+JSON supporta ben 6 tipi e sintassi:
+ - stringhe
+ - valori numerici
+ - booleani per true/false
+ - i valori nulli
+ - gli array: delle liste ordinate di valori, caratterizzati dalla parentesi quadre. Non ci sono restrizioni per i valori della lista, possono essere anche eterogenei! Ovvero può avere sia numeri sia stringhe che qualsiasi cosa
+ - oggetti/documenti intesi come mappe associative che chiave/valore caratterizzate dalle parentesi graffe e all'intero possiamo inserire quello che ci pare, altri attributi o altri oggetti
+
+{
+ string: "I'm a string",
+ number: 33
+ boolean: true,
+ null: null,
+ array: [5, "20"],
+ object:{
+  string: "Me too!",
+  number: 10
+ }
+}
+
+Il JSON è generalmente un formato noto a molti programmatori, a prescindere dal linguaggio di programmazione che usano.
+
+Alcune cose da ricordare sul JSON
+è formato da una lista chiave/valore { chiave: "valore" } mentre il valore può essere di 6 tipi diversi(stringa, intero, booleano, null, array, oggetti), la chiave può essere solo di tipo stringa.
+ - Pertanto lo standard consiglia sempre di usare i doppi apici (") nelle chiavi, anche se è facoltativo se il nome della chiave inizia con una lettera. Se dovessi iniziare con un numero, le virgolette diventeranno obbligatorie
+ - In caso di chiave duplicata viene considerato il valore dell'ultima dichiarazione, cioè se stiamo salvando un oggetto il cui attributo nome viene settato con due diversi valori, all'interno del database verrà segnato l'ultimo valore attribuito.
+{
+ nome: "Alberto", 
+ ...
+ nome: "Marta"
+}
+ - In JSON abbiamo solo 2 strutture dati basilari che possiamo combinare in tutti i modi arbitrariamente: gli array e i dizionari(mappa associativa. Sono gli oggetti o documenti).
+Se ci fate caso tutti i documenti JSON visti fin'ora erano a loro volta dei dizionari
+{ title: "Nuovo corso fighissimo!",
+ attachments: [{name: "file PDF",
+                files:["/slide01.pdf",
+                       "/slide02.pdf",
+                       "/slide03.pdf"]
+               },
+               {...}
+ ]
+}
+
+
+Il BSON è la rappresentazione binaria del JSON, è un open standard.
+Anche se dovesse far sorgere qualche dubbio, non importa, perché viene utilizzato in maniera trasparente all'interno del database per questioni di efficienza e a noi non cambia proprio nulla.
+Viene gestito da MongoDB e dai drivers
+
+Il BSON permette di fare delle scansioni molto veloci dei documenti
+Immaginiamo un documento il cui attributo text pesa 200Kb e che a noi interessa sapere il valore dell'attributo successivo, senza una scansione intelligente noi analizzeremo parti del documento che non ci interessano facendo uno sforzo inutile
+{ _id: ...,
+ title: "Articolo molto lungo", 
+ text: { 200kb },
+ active: true
+}
+
+invece il BSON consente di saltare tutto e di andare direttamente all'attributo che ci serve.
+A noi questo meccanismo interessa per capire che MongoDB consente di estendere i 6 tipi del JSON, aggiungendone qualcuno di nuovo, ecco i principali:
+ - date: tipo data
+ - BinData: un byte array( viene usato per sorgenti immagini, UUID, quindi dati binari)
+ - ObjectID: è il più importante che capiterà di usare più spesso. Ogni documento su MongoDB deve obbligatoriamente avere l'attributo _id quindi hanno pensato di creare un tipo apposito per rendere lo storage più compatto. È l'elemento più comune presenti su MongoDB
+
+---
+[Schema Dinamico]
+Spesso sento dire che MongoDB è schemaless ovvero senza schema, in realtà non è proprio così. Infatti ha un suo schema interno proprio come un catalogo.
+Il suo schema interno è un catalogo di database, al cui interno ci sono le collection nelle quali ci sono indici e documenti.
+_id e indici sono obbligatori e impliciti.
+Volendo possiamo indicizzare altri attributi per velocizzare le query.
+Lanciare una query su attributi senza indici è poco performante perché bisogna accedere a ogni singolo documento, avendo gli indici sugli attributi è molto più performante perché è come eseguire una ricerca in una mini collection formata solo dai valori del nostro attributo.
+In aggiunta c'è tutta la parte di schema dinamico che offre molti vantaggi: differenti documenti possono avere differenti schemi, supportando quindi il polimorfismo.
+
+Inoltre possiamo avere una corrispondenza diretta tra i dati nella programmazione a oggetti e il database, questo facilita molto la programmazione e ovviamente le aziende possono adattarsi più facilmente ai cambiamenti( vedi tecniche di programmazione: agile, scrum, extreme programming )
+
+Vediamo questi vantaggi nell'atto pratico: abbiamo detto polimorfismo e corrispondenza dei dati tra database e programmazione a oggetti.
+Immaginiamo di avere una superclasse "Forme" nel nostro linguaggio preferito e delle sotto classi come "punto"(x,y), "cerchio"(radius), "triangolo"(diagonal) ognuna con le proprie caratteristiche
+
+Proviamo a pensare come trasporre questa struttura in un database relazionale, la soluzione più semplice sarebbe quella di creare una tabella "forme" mettendo al suo interno le prime due forme "punto" e "cerchio", così però non consideriamo gli attributi delle sottoclassi.
+
+Il primo è un punto, quindi dobbiamo modificare la tabella per aggiungere "x,y" i due attributi del "punto", stesso discorso per aggiungere l'attributo del "cerchio"(radius) e del "triangolo"(diagonal)
+
+Tabella: Forme
+id| forma | x | y | radius | diagonal |
+1 | punto | 4 | 2 | null | null |
+2 | cerchio | null | null | 1 | null |
+3 | triangolo | null | null | null | 3 |
+
+in questo modo può sembrare corretto, ma abbiamo dovuto modificare la tabella(ALTER TABLE) aggiungendo le colonne, in più ci sono troppi attributi null scaturiti da attributi impropri.
+Insomma non mi sembra la soluzione migliore.
+
+Bisognerebbe creare tabelle diverse per ogni sottoclasse, ma diventerebbe ancora più complicato gestirle, quindi meglio lasciar perdere.
+Vediamo cosa succede su MongoDB invece:
+creiamo una nuova collection chiamata "forme" e al suo interno creiamo un documento per salvare un oggetto di classe "punto", mettiamo gli attributi che vogliamo.
+Corrisponde perfettamente alla classe.
+Possiamo aggiungere anche un altro documento nella stessa collection, magari di classe "cerchio" che a differenza del "punto" avrà diversi attributi
+
+{
+  forme: "punto",
+  x: 4,
+  y: 3
+}, 
+
+{
+ forme: "cerchio",
+ radius: 1
+}
+
+
+Insomma è una soluzione ottima, facile e veloce.
+Per modifiche da eseguire in tempi brevi, lo "schema dinamico" risulta perfetto!
+Immaginiamo di aver lanciato il nuovo social network del millennio e ci siamo dimenticati di inserire un attributo per gli utenti come ad esempio lo stato sentimentale e dobbiamo porre rimedio nel più breve tempo possibile.
+Con lo schema dinamico possiamo risolvere nel più breve tempo possibile: aggiungiamo un nuovo attributo e lo renderemo obbligatorio per i nuovi utenti, mentre per i vecchi utenti si può stabilire un valore di default che poi l'utente deve/può modificare.
+
+***Insomma è il database che si adatta alle nostre esigenze e non siamo più noi ad adattarci al database, si modella in base a quello che ci serve!!!
+
+
+[Da relazionale ai documenti]
+ecco un esempio incisivo che mostra la superiorità di MongoDB: come trasformare un blog con database relazionale, 5 tabelle.
+Non immaginiamo un blog complicato, sicuramente avremo una tabella Posts(post_id, title, text, date, author_id) dove author_id è la chiave esterna per l'autore, quindi avendo una chiave esterna sicuramente avremo una tabella Authors(author_id, username, password).
+Ogni blog che si rispetti da la possibilità di poter commentare i propri articoli(Posts) quindi consideriamo una tabella Comments(comment_id, post_id, name, body, email) per un sistema di commenti molto semplice.
+
+Tra la tabella Posts e la tabella Comments c'è una relazione uno a molti (1-N), nello specifico: un articolo può avere più commenti, ma un commento può appartenere a un solo articolo.
+
+Se abbiamo molti articoli, abbiamo bisogno di qualcosa per organizzarli, magari un sistema di tag o di categorie: Creiamo la tabella Tags(tag_id, name).
+Le categorie hanno però una relazione con gli articoli di molti-a-molti(N-N), ovvero: un articolo potrebbe appartenere a più categorie e una categoria può essere utilizzata da più articoli.
+Per fare questo dobbiamo avere una tabella che ci farà da tramite per il collegamento, quindi abbiamo bisogno di: Post_Tag(post_id, tag_id) che avrà gli entrambi gli id.
+
+Quindi immaginiamo che le tabelle di un semplice blog possano essere:
+ - Posts(post_id, title, text, date, author_id)
+ - Comments(comment_id, post_id, name, body, email)
+ - Authors(author_id, username, password)
+ - Tags(tag_id, name)
+ - Post_Tag(post_id, tag_id)
+
+Una semplice domanda: immaginiamo di aver scritto il blog nel vostro linguaggio preferito, immaginiamo di voler leggere un singolo articolo, ma a quante tabelle bisogna accedere?
+Sicuramente dobbiamo mostrare: titolo e testo dell'articolo quindi tabella Posts, poi dobbiamo mostrare chi ha scritto l'articolo facendo apparire il nome e non l'id -> tabella Autori, poi dobbiamo mostrare i commenti quindi accediamo a un'altra tabella e se dovesse avere delle categorie/tag dobbiamo mostrarli, accedendo prima alla tabella Post_tag e se dovesse avere dei commenti/tag dobbiamo anche mostrarli utilizzando la tabella Tags.
+Nel caso migliore, dobbiamo accedere comunque a 4 tabelle(Posts, Authors, Post_Tag, Comments)
+nel caso peggiore dobbiamo accedere a tutte e 5 le tabelle.
+
+Considerate che è un blog semplice con poche funzioni, immaginate se ne avessimo aggiunte delle altre.
+
+Vediamo ora in MongoDB come appare.
+La struttura della collection di Posts apparirebbe così:
+{
+ _id_ ObjectId(...),
+ title: "L'articolo più bello del mondo",
+ body: "blablabla",
+ date: ISODate("2015-08-19T06:01:17.171Z"),
+ author:"AlbertoOlla"
+}
+
+L'autore è semplicemente un riferimento a quell'autore.
+Per i commenti mettiamo in atto la tecnica delle pre-join, quindi creiamo un array per i commenti dove ogni commento è semplicemente un documento con i relativi attributi:
+{
+ _id_ ObjectId(...),
+ title: "L'articolo più bello del mondo",
+ body: "blablabla",
+ date: ISODate("2015-08-19T06:01:17.171Z"),
+ author:"AlbertoOlla",
+ comments:[
+  {
+   name: "Alberto",
+   body: "Lo penso anch'io!",
+   email: alberto.olla@gmail.com
+  },
+  {
+   name: "Anonimo",
+   body: "Un commento anonimo!",
+   email: "email.anonima@gmail.com"
+  }
+ ]
+}
+
+Non ci servono chiavi esterne, sappiamo già che è riferito al nostro articolo perché è incapsulato al suo interno!
+Inoltre l'array è già una lista ordinata, quindi i commenti hanno già un loro ordine in base all'inserimento.
+Per il tag e le categorie non c'è nulla di più semplice su MongoDB, creando semplicemente un array e inserendo i dati come stringhe senza dover creare un'altra collection, così possiamo fare delle queries per ogni singolo tag:
+{
+ _id_ ObjectId(...),
+ title: "L'articolo più bello del mondo",
+ body: "blablabla",
+ date: ISODate("2015-08-19T06:01:17.171Z"),
+ author:"AlbertoOlla"
+ comments:[
+  {
+   name: "Alberto"
+   body: "Lo penso anch'io!"
+   email: alberto.olla@gmail.com
+  },
+  {
+   name: "Anonimo"
+   body: "Un commento anonimo!"
+   email: "email.anonima@gmail.com"
+  }
+ ],
+ tags: ["mongodb", "no-sql", "performance"]
+}
+
+Ci sarà sicuramente una collection Authors, ma questa volta conterrà soltanto l'id e la password:
+{
+ _id: "AlbertoOlla",
+ password: "aterges"
+}
+Per l'id non usiamo un numero, ma mettiamo semplicemente il nome dell'utente, così facendo non abbiamo bisogno di frugare la collection per mostrare a video il nome, è già lì.
+
+Riproponiamo la domanda: a quante collection bisogna accedere per mostrare la pagina di un singolo articolo? La risposta è: solo 1, abbiamo già tutto ciò che ci serve.
+
+Immaginiamo di avere un blog con tanti visitatori, per ogni refresh di pagina del singolo articolo accediamo a 5 tabelle del database, mentre con MongoDB basta praticamente niente per eliminare tempi di attesa per le JOIN del database relazionale perché non esistono e abbassare drasticamente il carico del server. Una figata.
+Inoltre la soluzione che abbiamo proposto è già sicuramente una buona soluzione, ma può essere ancora più performante!
+Con le Pre-Join ma usate con il giusto criterio.
+
+(***mio esempio estemporaneo:
+è come se invece di tenere le viti da una parte e i cacciaviti da un'altra parte, si tenessero tutte le viti della stessa dimensione vicino al giravite di quella dimensione. Significa che quando devi usare il cacciavite tu puoi usarlo, ma se devi avvitare una nuova vite hai già il cacciavite con cui avvitarla)
+
+[Schema e design]
+Le pre-join o embedding sono potentissime se applicate nel modo giusto, ma possono essere completamente inutili se non ne si capisce l'essenza (come quelle persone che cercano di ricreare su MongoDB la stessa struttura che hanno nel database relazionale e fidatevi, ci sono!).
+
+Chi riesce a capire in quali casi è meglio utilizzarle e con quale criterio, chi riesce a capire questo e a farlo proprio riesce a creare delle strutture di database super personalizzate per il proprio sito e ultraperformanti.
+Cerchiami di capire effettivamente quando vanno applicate e con quale criterio.
+
+# Embedding o non-embedding, questo è il problema:
+Nell'esempio precedente avevamo una collection di Posts:
+{
+ ...
+ comments:[
+  {...},
+  {...},
+ ],
+ tags: ["...", "...", "..."]
+}
+
+Ma questo poteva far sorgere un problema sui tags:
+ - potrebbero risultare duplicati in differenti posts, con pochi articoli è irrilevante, ma dobbiamo sempre pensare alla peggiore delle situazioni e avendo tantissimi articoli potremmo avere tags ripetuti e quindi spazio sprecato inutilmente. L'alternativa è quella di usare degli indici numerici per ognuno, così diventano univoci
+ - La sostituzione dei tag diventa tediosa: avendo sfuso i tag, non possiamo avere un controllo immediato, ovvero se avessimo sbagliato a inserire tag, dovremmo fare un replace su ogni documento che utilizza quel tag. Invece con gli indici ci sarebbe bastato modificare il valore una sola volta.
+ - Usando gli indici però le performance verrebbero influenzate negativamente, quindi come facciamo? Ci accontentiamo: meglio avere una lettura veloce anche se con dei tag duplicati. Anche il replace non presenta un grosso problema dato che la modifica dei tag risulta inusuale, poco frequente e resta comunque la possibilità di sostituirli in modo meno immediato(uno a uno in ogni collection).
+
+In questo caso la soluzione di adoperare l'embedding risulta comunque molto valida, perché è molto raro dover accedere a un singolo tag senza accedere al post, lo stesso discorso vale anche per la lettura dei commenti.
+
+È importante capire questo concetto, quando fare e quando non fare l'embedding e basta seguire una semplice regola d'oro: Seguire il "flusso d'accesso ai dati" 
+
+Il "flusso di accesso ai dati" lo abbiamo già usato senza saperlo, immaginiamo di dover caricare la pagina in cui verrà mostrato un singolo post, ci servono quindi le sue informazioni(titolo, autore, commenti, tags, ...).
+Proviamo a individuare il "flusso di accesso ai dati": dati del post(1), lista commenti(2), tags(3)
+Questo è il flusso. Tenere conto del "flusso di accesso ai dati" quando si struttura un database assicura delle ottime performance
+
+Come decidere?
+ 1) seguire il "flusso di accesso ai dati"
+ 2) Se accedendo al singolo post necessito anche di comments e tags, allora ha senso incapsulare, perché fa parte tutto dello stesso fluido di accesso.
+ 3) consideriamo un limite di 16Mb per ogni documento. Se pensi di superarlo(caso raro) usa una collection separata.
+
+Nel terzo caso per i limite di 16Mb non parliami di sorgenti di immagini o simili che possiamo salvare con un'altra configurazione, ma di normali documenti che abbiamo visto fin'ora.
+Se pensate di superare questo limite magari a causa dei "Comments" nella nostra collection, allora conviene creare una collections separata. Nei siti normali non c'è pericolo, si parla nei casi estremamente rari.
+
+In breve ricordiamoci sempre di seguire sempre il "flusso di accesso ai dati" e che c'è un limite di 16Mb per ogni documento.
+
+Ecco gli esempi presi direttamente dal secondo webinar tenuto da Massimo Brignoli, un senior solution architect che lavora direttamente da MongoDB presumo nella sede di Milano.
+Strano che abbia appena 300 visualizzazioni pur essendo in italiano su youtube e lui spieghi davvero benissimo ( https://www.youtube.com/watch?v=cdhKOTwkoxQ ).
+
+Guardiamo le soluzioni di ottimizzazione che vengono proposte.
+
+problema della modellazione dei Commenti: incapsulamento
+La prima già l'abbiamo vista, ed è l'incapsulamento dei commenti nel documenti dell'articolo del blog, con il vantaggio di ottenere tutti i risultati con un'unica query, ma allo stesso tempo l'array che contiene i commenti non ha limiti e potrebbe crescere e rischiare di superare i 16Mb.
+Per ovviare a questo si potrebbe provare un altro approccio, proviamo con le REFERENCE.
+
+soluzione1 al problema della modellazione dei Commenti: REFERENCE
+Abbiamo sempre il nostro array di commenti, ma all'interno invece dei valori mettiamo una semplice referenza ovvero un id di ogni singolo commento che invece andremo a salvare in una collection separata, in questo modo non c'è il rischio di superare i 16Mb ma perdiamo in termini di performances, perché dobbiamo eseguire una query per ogni singolo articolo così otteniamo la lista di tutti gli id dei commenti e solo dopo possiamo interrogare in base all'id del commento per avere le informazioni sui commenti; insomma non è per niente ottimizzato quindi è meglio andare avanti.
+
+Post collection:
+{
+ _id: ObjectId(),
+ title: "L'articolo più bello del mondo!",
+ body: "bla bla",
+ date: ISODate("2015-08-19T06:01:17.171Z"),
+ author:"AlbertoOlla",
+ comments:[
+  ObjectId(...),
+  ObjectId(...),
+  ObjectId(...),
+  ...
+ ],
+ tags: ["mongodb", "no-sql", "performance"]
+}
+
+Comment collection:
+{
+ _id: ObjectId(...),
+ post_id: ObjectId(...),
+ name: "Alberto",
+ body: "Lo penso anch'io!",
+ email: alberto.olla@gmail.com
+}
+
+soluzione2 al problema della modellazione dei Commenti: approccio ibrido
+Nel webinar viene mostrato un approccio ibrido molto interessante, ovvero:
+teniamo i commenti incapsulati, ma li teniamo in un array a dimensione fissa (esempio: solo gli ultimi 20 commenti inseriti), quando andremo a fare una query per avere i dati dell'articolo possiamo già mostrare i primi 20 commenti senza eseguire altre query, ed eseguendo quello un array a dimensione fissa, non rischiamo di sforare il limite.
+Per avere un array a dimensione fissa, possiamo usare un particolare operatore durante l'inserimento, così che MongoDB tagli gli elementi in eccesso mettendoli in una collection separata.
+Dato che abbiamo solo gli ultimi 20 commenti, è consigliato inserire nella nostra app un piccolo codice per il conteggio nell'inserimento e la rimozione dei commenti stessi, così da non dover rifare a ogni refresh gli stessi conti.
+Quindi teniamo conto del numero totale di tutti i commenti, ma non solo, teniamo conto anche del numero di pagine dei commenti: esempio abbiamo ricevuto 85 commenti, noi li gestiremo con una paginazione in 20 commenti e poi l'utente può andare alla pagina successiva e solo in quel caso eseguiremo la query per mostrare gli altri commenti.
+
+Post collection:
+{
+ _id: ObjectId(),
+ title: "L'articolo più bello del mondo!",
+ body: "bla bla",
+ date: ISODate("2015-08-19T06:01:17.171Z"),
+ author:"AlbertoOlla",
+ comments:[
+  {
+  name: "Alberto",
+  body: "Lo penso anch'io!",
+  email: "alberto.olla@gmail.com"
+  },
+  ...
+ ],
+ comments_count: 85,
+ comments_page: 2,
+ tags: ["mongodb", "no-sql", "performance"]
+}
+
+Comments collection:
+{
+ _id: ObjectID(...),
+ post_id: ObjectId(...),
+ page: 2,
+ count: 25,
+ comments: [
+  {
+   name: "Alberto",
+   body: "Lo penso anch'io!",
+   email: "alberto.olla@gmail.com"
+  },
+  ...
+ ]
+}
+
+Ogni Comments collection è composta dalla pagina, quanti commenti sono presenti nella pagina e l'array di massimo 40 elementi per i commenti.
+
+Abbiamo costruito la struttura seguendo il flusso dei dati: abbiamo l'articolo velocissimo in lettura già con 20 commenti inclusi e poi abbiamo le singole pagine per i gruppi di commenti già pronte per essere visualizzate.
+Praticamente abbiamo reso leggermente più complicata la scrittura, inserendo il sistema di contatori e dividendo i commenti già in gruppi, ma allo stesso tempo ottimizziamo drasticamente le performances in lettura che è l'azione più frequente, quindi è più che perfetto!
+
+[Capitolo 2: CRUD]
+[Presentazione CRUD e Operatori]
+Questa è una piccola introduzione al capitolo che riguarda il CRUD e gli operatori, quello che bisogna sapere per creare, leggere e modificare documenti all'interno delle nostre collections.
+Come abbiamo già visto MongoDB non utilizza una sintassi o un linguaggio SQL, ma per effettuare le queries utilizzeremo i *metodi* che ci mette a disposizione.
+CRUD è l'acronimo di Create, Read, Update e Delete e su MongoDB li traduciamo con:
+ CRUD | MongoDB | (similitudine con i database relazionali RDBMS)
+ Create -> Insert | Insert
+ Read -> Find | Select
+ Update -> Update | Update
+ Delete -> Remove | Delete
+
+In questo capitolo vedremo anche gli operatori come OR e AND, ma MongoDB ne mette a disposizione anche tanti altri.
+Dobbiamo solo ricordare che gli operatori in MongoDB sono sempre preceduti dal simbolo del dollaro: $
+MongoDB ci mette a disposizione:
+ - per query di ricerca: $gt, $lt, $or, $and, $in, $nin, $type, $exists, $regex
+ - per query di update: $set, $unset, $inc
+ - per gli array: $push, $pop, $pull, $pushAll, $pullAll, $addToSet
+
+[CRUD - Insert: Aggiungere Documenti]
+L'insert come nel database relazionale è una delle operazioni basiche e serve per inserire un nuovo dato nel database, nel caso di MongoDB serve a inserire un nuovo documento di tipo JSON.
+Vediamo come si fa e prendiamo confidenza con la shell.
+
+> mongo
+> use demo
+creiamo un documento in javascript
+var doc = { "name": "Alberto", "surname": "Olla", "city": "Cagliari" }
+
+se nella shell scriviamo doc, ci restituirà il documento JSON.
+con il comando db ci mostra in quale database siamo.
+Abbiamo detto che i documenti vivono all'interno di una collection situata in un particolare database, per inserire il documento nel nostro database possiamo scrivere: db.users.insert(doc)
+Vedete come come con le collection si ha una proprietà del database, mentre insert è un metodo della collection che ricerca come argomento un oggetto JSON.
+scrivendo: db.users.find() verrà restituito un unico documento perchè non ne abbiamo inserito altri
+Possiamo notare che MongoDB ha inserito un nuovo attributo "_id" di tipo ObjectId
+Questo è un tipo di attributo obbligatorio che tutti i documenti devono avere e serve per identificare il documento, è una sorta di chiave primaria.
+La cosa più importante di _id è che è UNICO e IMMUTABILE.
+ - UNICO: perché non possono esistere altri documenti nella stessa collection, con la stessa chiave.
+ - IMMUTABILE: perché non può essere mai modificato.
+Ovviamente si può simulare la modifica eliminando il documento e ricreandolo e impostando un diverso _id.
+È di tipo ObjectId questo significa che viene generato automaticamente unendo tra loro alcuni dati come ad esempio il tempo, l'identificativo della macchina, il process id che sta gestendo l'operazione e dati di questo genere.
+L'obiettivo è quello di creare in tempi brevissimi un id che abbia il maggior numero di probabilità di essere unico, in questo modo possiamo inserire documenti senza specificare _id senza nessun pericolo di collisioni. Possiamo anche specificare noi l'id.
+
+db.users.insert( { name: "Alberto", surname: "Olla", city: "Cagliari" } );
+
+Noi in questo esempio abbiamo adoperato la variabile doc per poter dichiarare il nostro elemento JSON, in realtà esiste una maniera molto più sbrigativa e pratica, ovvero quella di dichiarare l'elemento JSON all'interno delle parentesi tonde.
+
+[Cap. 2.3 CRUD - Find e FindOne: Cercare i Documenti]
+MongoDB ci offre due metodi per poter effettuare le ricerche all'interno delle nostre collections: Find e FindOne e sono molto simili alle SELECT dell'SQL.
+Find restituisce più documenti come risposta mentre findOne ne restituisce solo uno.
+Per cercare un singolo documento si usa la funzione findOne() e può essere richiamata senza argomenti per ricevere un documento random(***) della collection
+> db.users.findOne()
+{
+ "_id": ObjectId("55f6e444536437072c7201c6"),
+ "name": "Alberto",
+ "surname": "Olla",
+ "city": "Cagliari"
+}
+
+e a cosa potrebbe servire usarla così? Ad esempio per dare un'occhiata alla struttura di collection che sono molto grandi.
+findOne() può essere invocata anche con un argomento che viene usato per fare un match con i documenti, diciamo che è una sorta di WHERE nelle query SQL, quindi è una condizione.
+Es:
+> db.users.findOne( { "name": "Alberto" } )
+in questo caso viene presentato il primo documento che soddisfa il criterio di ricerca, ovvero la chiave "name" con valore "Alberto".
+Come secondo parametro facoltativo possiamo anche specificare quali sono gli attributi che vogliamo ci vengano restituiti:
+> db.users.findOne( { "name": "Alberto" }, { name:true } )
+in questo caso ci verrà presentato solo l'attributo name e l'attributo _id anche se non l'abbiamo specificato, il quale viene considerato da MongoDB una sorta di attributo speciale e quindi ci verrà sempre mostrato a meno che non siamo noi a specificare il contrario scrivendo _id:false nelle opzioni di visualizzazione.
+
+Vediamo find() la quale come abbiamo detto a differenza di findOne() non mostra solo un documento della collection.
+Per popolare il database adoperiamo un ciclo javascript: for(var i=0; i<1000; i++) { names = ["esame", "prova", "quiz"]; for(var j=0; j<3; j++) { db.scores.insert( { student: i, type: names[j], score: Math.round(Math.random()*1000) } ); } }
+
+Spieghiamo cosa fa questo codice perché non essendo indentato si capisce ben poco: essenzialmente popola una nuova collection con dei punteggi di varie prove/esami e 1000 studenti, più precisamente abbiamo un primo ciclo che viene eseguito 1000 volte per tutti gli studenti e all'interno abbiamo un ciclo che viene eseguito 3 volte, l'indice di questo secondo ciclo viene adoperato per scegliere il tipo di prova. Quindi a ogni ciclo viene salvato il numero dello studente, il tipo di prova e un numero casuale che rappresenta il voto. Alla fine di questi cicli avremo 3000 records o comunque 3000 documenti.
+
+per visualizzare usiamo: db.scores.find()
+dal momento che abbiamo molti documenti, la shell non li mostrerà tutti insieme e per visualizzarne altri dobbiamo scrivere "it".
+Per avere una visualizzazione più pulita, è meglio scrivere: db.scores.find().pretty()
+Come abbiamo visto per findOne, anche in find() possiamo specificare delle condizioni
+db.scores.find( { type:"prova" } )
+oppure
+db.scores.find( { student:19 } )
+
+volendo possiamo anche combinare più condizioni insieme concatenandole con la virgola:
+db.scores.find( { student:19, type:"prova" } )
+in questo caso la virgola funge da AND in quanto il documento deve soddisfare ENTRAMBE le richieste nello stesso momento.
+
+Possiamo anche inserire il secondo argomento per specificare quali attributi vogliamo vedere: db.scores.find( { student:19, type:"prova" }, { score:true } )
+
+[Cap2.4 - Operatori-GT-e-LT-Maggiore-di-e-Minore-di]
+Solitamente su MongoDB gli operatori hanno tutti la stessa struttura, ad eccezione AND e OR che vedremo più avanti, quindi una volta capita la logica, applicarli ci verrà naturale
+$GT (greater than) e $LT (lower than)
+
+specifichiamo prima l'attributo al quale applicare l'operatore:
+db.scores.find( { score: { $gt:95 } } )
+in questo modo cerchiamo tutti gli attributi con un punteggio maggiore a 95
+
+db.animals.insert( { name:"giraffa", eta:4, color:"marrone e giallo", zoos:[{name:"Zoo di New York", address:{street:"Central Park, New York", city:"New York", country:"USA"}}]});
+
+db.animals.find( { eta:{$gt:2} } );
+{ "_id" : ObjectId("591f5f6d5cc13bcf245d02d3"), "name" : "giraffa", "eta" : 4, "color" : "marrone e giallo", "zoos" : [ { "name" : "Zoo di New York", "address" : { "street" : "Central Park, New York", "city" : "New York", "country" : "USA" } } ] }
+
+Se volessimo vedere sia score maggiore di 95 sia solo le prove, scriviamo:
+db.scores.find( { score: { $gt:95 }, type:"prova" } )
+
+Proviamo a cercare tra un intervallo di punteggio: maggiore di 95 e minore di 98,
+dobbiamo semplicemente scrivere l'operatore $gt e l'operatore $lt
+db.scores.find( { score: { $gt:95, $lt:98 } } )
+Gli operatori semplici $gt e $lt non considerano gli estremi dell'intervallo,
+se vogliamo gli estremi dell'intervallo ci basterà aggiungere la "e" di "equal"
+db.scores.find( { score: { $gte:95, $lte:98 } } )
+
+Abbiamo visto come usare gli operatori con i numeri, ma si possono usare anche con le stringhe? Sì, anche se non è proprio raccomandato
+
+db.users.insert( { name: "Carlo" } );
+db.users.insert( { name: "Bobo" } );
+db.users.insert( { name: "Annarita" } );
+db.users.insert( { name: "Ermenegildo" } );
+db.users.insert( { name: "Enrico" } );
+db.users.insert( { name: "Felice" } );
+db.users.insert( { name: "Davide" } );
+
+proviamo a fare una ricerca:
+db.users.find( { name:{ $lt:"D" } } );
+db.users.find( { name:{ $lt:"D", $gt:"B" } } );
+In questo secondo caso mostrerà anche "Bobo" anche se abbiamo usato l'operatore $gt invece di $gte
+quando usiamo questi operatori sulle stringhe mongodb usa l'ordinamento in base alla rappresentazione dei byte sull'UTF-8 quindi visualizza anche Bobo perché la parola Bobo è a tutti gli effetti considerata maggiore della lettera B.
+
+Se invece inserissimo il nome: db.users.insert( { name: "B" } );
+questo non verrebbe trovato, in quanto la "B" come singolo carattere non verrebbe considerata maggiore di "B".
+
+MongoDB ha uno schema dinamico, possiamo aggoimgere nell'attributo "name" che attualmente contiene solo stringhe, anche dei numeri, esempio: db.users.insert( { name:20 } );
+Possiamo comunque effettuare le nostre queries senza intralcio perché abbiamo sempre specificato la lettera iniziale come stringa.
+
+
+[CRUD - Operatori $exists, $type, $regex]
+db.users.find()
+come possiamo vedere all'interno di questa collections abbiamo elementi diversi.
+$exists ci permette di verificare l'esistenza di un attributo all'interno dei documenti.
+Vediamo come usarlo: db.users.find( { city: { $exists:true } } )
+specifichiamo la chiave sul quale applicare l'operatore.
+Apriamo un sottodocumento e inseriamo l'operatore come coppia chiave valore.
+$exists riceve true o false
+Possiamo anche scrivere l'inverso, ovvero tutti i documenti che non hanno una città.
+
+Con $type possiamo chiedere se l'attributo ha un tipo specifico, questo lo si usa più raramente
+Vediamo come usarlo: db.users.find( { name: { $type:2 } } )
+il tipo dobbiamo indicarlo come da specifiche BSON, nelle specifiche infatti le stringhe hanno valore 2.
+Possiamo vedere tutti i tipi supportati in http://bsonspec.org/
+
+Ora passiamo al pezzo forte: $regex è usata per le espressioni regolari.
+Per chi non conosce le espressioni regolari, diciamo che permettono di fare controlli in base a delle regole o modelli sulle stringhe, cioè possiamo delle stringhe che iniziano con una determinata lettera o che finiscono con un'altra e così possiamo creaer regole molto più complesse
+Non ci soffermeremo molto a parlare sulle espressioni regolari perché ci sarebbe molto da dire, vedremo solo come si usano su MongoDB e qualche esempio utile a tutti
+Vediamo come usarle: db.users.find( { name: { $regex:"a" } } )
+con questo comando abbiamo chiesto di cercare tutti i nomi che contengono la lettera "a" MINUSCOLA, non maiuscola.
+ancora: db.users.find( { name: { $regex:"e$" } } )
+attenzione il simbolo di dollaro "$" nelle virgolette fa parte della simbologia delle espressioni regolari e non di MongoDB, indica la fine della stringa quindi in questo caso ci verranno restituiti tutti i nomi che terminano con la lettera "e"
+
+$regex è sicuramente un operatore molto potente, ma il suo utilizzo è sconsigliato, non perché non sia utile ma perché le sue performance sono molto influenzate sia dalla complessità del pattern che si sta utilizzando per la ricerca sia per la struttura dei dati, quindi non da delle vere certezze in un ambiente scalabile e pertanto è preferibile non adoperarlo.
+
+Ovviamente MongoDB ha tante risorse per effettuare ricerche su testi in maniera molto performante: possiamo usare gli indici appositi detti "text_index" e l'operatore "text", purtroppo non vedremo questi argomenti in quanto sono avanzati.
+Per il momento accontentiamoci delle regex che vanno bene per il 90% dei siti.
+
+ancora: db.users.find( { name: { $regex:"^A" } } )
+L'accento circonflesso ^ ci permette di avere tutti i documenti che iniziano con una determinata lettera.
+In realtà questa query diventa performante in quanto viene convertita meccanicamente in un range query, nel caso dell'esempio che va da A a B con B escluso
+
+
+[CRUD - Combinare le query con $AND e $OR]
+Gli operatori $and e $or ci servono per combinare più condizioni tra loro, creando quindi delle queries più complesse.
+Fin'ora abbiamo visto operatori utilizzati come sottodocumenti dell'attributo, mentre $and e $or sono gli unici due che si scrivono in maniera diversa, vediamo come.
+db.users.find( { $or:[{name:{$regex:"o$"} },{ city:{$exists:false} }] } )
+
+la prima cosa che specifichiamo è un array con le varie condizioni da combinare
+in questo caso ci sono due condizioni separate che vengono unite dalla clausula OR
+per ottenere un risultato con OR basta anche soltanto una delle due condizioni sia soddisfatta.
+
+Scrivendo queries elaborate, potremmo avere problemi a distrecarci tra le varie parendesi, fortunatamente la shell ci viene in aiuto, infatti se ci spostiamo con il cursore su un simbolo di gruppo come le parentesi tonde, quadre o graffe, possiamo vedere che la sua corrispondente viene illuminata di blu; se dovessimo dimenticarci di scriverne qualcuna, la shell ce lo ricorderà scrivendo "...", è il suo modo per dire che il documento non è concluso, basterà cliccare invio.
+
+
+Per l'operatore $AND la struttura è del tutto simile all'operatore $OR, vediamo:
+db.users.find( { $and:[{name:{$gt:"C"} },{ name:{$regex:"a"} }] } )
+
+Funziona, ma già abbiamo visto un comportamento del genere, equivale semplicemente a scrivere:
+db.users.find({ name:{$gt:"C", $regex:"a"} })
+
+Di norma si consiglia di utilizzare la seconda struttura, ovvero quella con la virgola per questioni di performances.
+Dal momento che quando si utilizza l'operatore $AND le condizioni vengono valutate separatamente l'una dall'altra quindi ha delle performances leggermente minori.
+
+[CRUD - La Ricerca e gli Array]
+Fin'ora abbiamo usato documenti con la struttura abbastanza semplice, proviamo invece adesso a usarli leggermente più complicati, proviamo a interagire con gli array:
+db.articles.insert({ title:"Primo", tags:["query", "array"] })
+db.articles.insert({ title:"Secondo", tags:["array", "mongodb"] })
+Creiamo due articoli con i tags, giusto per fare qualche prova di ricerca in entrambi inseriamo almeno un attributo comune; in questo caso il tag, il quale se fosse stato una semplice stringa per cercarlo avremmo potuto scrivere db.articles.find({ tags:"query" })
+noi sappiamo che è un array, però come avvertiamo MongoDB? In realtà non serve, perché è furbo e lo capisce da solo.
+Anche le queries si adattano al polimorfismo quindi lanciando questa ricerca MongoDB analizzerà come al solito tutti i documenti, se troverà l'attributo tags come stringa verificherà se è uguale a quella cercata, se l'attributo ricercato è un array controllerà tra tutti gli elementi dell'array per cercare una corrispondenza con la nostra stringa.
+Questo è un comportamento normalissimo per MongoDB in quanto è pensato per avere uno schema dinamico, la ricerca però non è ricorsiva e si livella al primo livello di profondità degli array!
+Cioè se noi avessimo più array uno dentro l'altro, MongoDB cerca solo nel primo livello.
+Precisiamo che MongoDB non offre nessun operatore per la ricerca ricorsiva oltre il primo livello di profondità e personalmente mi sembra del tutto logico per questioni legate alle performances.
+
+Essendo una query perfettamente normale possiamo combinarla con altre condizioni senza avere alcun tipo di problema.
+
+[CRUD - Operatori $ALL, $IN, $NIN]
+Gli operatori $ALL e $IN hanno la caratteristica di ricevere in ingresso non un singolo valore come gli altri operatori visti fin'ora, ma degli array.
+Aggiungiamo qualche altro articolo per avere altre combinazioni di tag:
+db.articles.insert({ title:"Terzo", tags:["mongodb", "array", "crud"] })
+db.articles.insert({ title:"Quarto", tags:["mongodb", "crud"] })
+db.articles.find().pretty()
+
+Immaginiamo di voler cercare tutti i documenti che hanno sia il tag "mongo" sia il tag "array", per farlo possiamo usare l'operatore $ALL in questo modo:
+db.articles.find({ tags:{$all: ["mongodb", "array"] } })
+Preciso che noi li abbiamo scritti senza pensare all'ordine, difatti anche MongoDB non lo considera dal momento che noi stiamo usando l'operatore $all
+
+Infatti guardando i risultati notiamo che possono avere anche altri tag rispetto a quelli cercati, ma l'importante è che quelli cercati nella query siano presenti anche se con un ordine diverso.
+
+L'altro operatore che vediamo è $IN qualcuno potrebbe conoscerlo perché in SQL ce n'è uno simile, beh questo ci permette di specificare una lista di valori esattamente come $all, con la differenza che basta semplicemente la presenza di uno solo di questi elementi cercati:
+db.articles.find({ tags:{$in: ["mongodb", "array"] } })
+ci mostra tutti gli elementi con tag "mongodb" o tag "array" (o anche entrambi), l'importante è che almeno uno dei due sia presente.
+
+L'operatore $in possiamo usarlo anche con le stringhe visto che si adatta al tipo di dato, ad esempio: db.articles.find({ title:{$in:["Primo", "Terzo"]} })
+
+
+Abbiamo anche l'operatore $nin (not in) che è la negazione di $in, ma questo ve lo lascio scoprire da soli.
+
+[CRUD - La Ricerca e i Sotto-Documenti]
+Nelle precedenti lezioni abbiamo visto come effettuare le operazioni con i vari tipi di dato(array, stringhe, numeri) per esclusione però ci rimangono i sotto-documenti, vediamo come utilizzarli.
+
+Innanzitutto creiamo una collection di contatti dove salviamo qualche contatto social, tipo:
+db.contacts.insert({ name:"Alberto Olla", socials:{twitter:"yourAlbertoOlla", email:"info@mongodbitalia.it"} })
+
+db.contacts.find().pretty()
+
+Se ora volessimo interagire con il sotto-documento che contiene il nick twitter e l'e-mail come facciamo? Proviamo a fare la cosa più banale che ci viene in mente:
+db.contacts.find({ socials:{twitter:"yourAlbertoOlla", email:"info@mongodbitalia.it"} })
+Cerchiamo l'attributo social e scriviamo esattamente il sotto-documento preciso e identico. Ottimo, funziona.
+
+Ma il fatto di averlo dovuto scrivere precisamente identico fa venire qualche dubbio.
+Invertendo l'ordine di twitter e di email non trova nulla:
+db.contacts.find({ socials:{email:"info@mongodbitalia.it",twitter:"yourAlbertoOlla"} })
+
+Questo perché effettua un controllo byte per byte con il BSON del documento ed essendo un ordine diverso anche i byte sono diversi pertanto non trova il risultato.
+
+
+Non va bene neanche scrivendo: db.contacts.find({ socials:{twitter:"yourAlbertoOlla"} })
+Ma allora come facciamo ad accedere agli attributi di un sotto-documento?
+
+MongoDB mette a disposizione una sintassi speciale, che è il punto(.), d'altronde stiamo parlando di "documenti" chiamati anche "oggetti" quindi non è strano dover adoperare il punto.
+Vediamo come usarlo:
+db.contacts.find({ "socials.twitter":"yourAlbertoOlla" })
+Vedrà se è un sotto-documento e se contiene l'attributo twitter, solo in caso positivo farà il controllo tra le stringhe.
+
+Come sempre possiamo combinare le condizioni dove utilizziamo la notazione del punto anche con altre condizioni come abbiamo visto nelle lezioni precedenti
+
+[CRUD - Limit, Sort, Skip e Count]
+Fin'ora abbiamo visto come fare interrogazioni e ricerche dello stesso tipo, ma vorrei soffermarmi un attimo per spiegarvi cosa succede dietro le quinte quando viene lanciata una query.
+Parleremo quindi dell'oggetto cursore.
+Quando lanciamo il comando find: db.users.find()
+viene costruito un oggetto di tipo cursore che contatta il database e immagazzina la risposta, immaginiamola come una lista di documenti.
+La shell è impostata per iterare il cursore e quindi mostrare tutti gli elementi.
+Volendo possiamo scorrere il cursore manualmente scrivendo: var cur = db.users.find(); null;
+dobbiamo aggiungere null a fine della riga altrimenti la shell eseguirebbe la query e ci rovinerebbe i piani
+La variabile cur è un oggetto di tipo cursore che ovviamente ha i suoi metodi: hasNext() e Next().
+hasNext() verifica se è presente l'elemento successivo alla posizione del cursore e può restituire true/false.
+next() verifica se è presente l'elemento successivo e restituisce l'elemento successivo spostando il cursore in avanti.
+Questi due metodi sono molto utili nella programmazione per creare delle soluzioni personalizzate.
+cur.hasNext()
+cur.next()
+
+Possiamo anche scrivere un ciclo per spostare il nostro cursore:
+ while( cur.hasNext() )  printjson( cur.next() );
+Ottenendo lo stesso risultato della shell.
+
+Vediamo qualche altra funzionalità del cursore.
+Ri-dichiariamo la variabile cur: var cur = db.users.find(); null;
+
+Possiamo utilizzare il metodo limit per limitare il risultato del cursore, un po' come avviene nelle SELECT dell'SQL.
+
+cur.limit(3); null;
+Con quest'azione abbiamo modificato il cursore anche se in realtà non è stato inviato ancora nessun dato al server, quindi l'oggetto cursore al momento è soltanto all'interno della nostra shell.
+Ecco l'output:
+ > var cur = db.users.find(); null;
+ null
+ > cur.limit(3); null;
+ null
+ > while(cur.hasNext()) printjson(cur.next())
+ { "_id" : ObjectId("591f61a15cc13bcf245d02d4"), "name" : "Carlo" }
+ { "_id" : ObjectId("591f61a15cc13bcf245d02d5"), "name" : "Bobo" }
+ { "_id" : ObjectId("591f61a15cc13bcf245d02d6"), "name" : "Annarita" }
+ > 
+
+
+Non c'è solo il limit, ma anche lo skip e sort.
+Sort: è un po' come order by delle query SQL, ha bisogno di un sottodocumento dove inseriamo l'attributo con il quale vogliamo ordinare i risultati e il tipo di ordinamento: 1 crescente; -1 decrescente.
+Possiamo anche scegliere altri attributi di ordinamento in base all'ordine di priorità
+ var cur = db.users.find(); null;
+ cur.sort( { name: -1, surname: 1 } ).limit(3).skip(2);
+
+Skip invece è simile a limit ma permette di saltare N documenti, nel nostro esempio i primi due documenti del risultato verranno saltati e non ci verranno restituiti.
+
+Visto che sono tutti metodi del cursore, possiamo anche combinarli insieme:
+ db.users.find( {} ).sort({name:-1}).limit(3).skip(2)
+
+MongoDB non considera MAI in nessun caso l'ordine in cui li dichiariamo, ma utilizza sempre un suo ordine molto rigoroso per applicarli: applicherà sempre prima il SORT, poi il LIMIT e poi lo SKIP
+quindi possiamo dichiarli con l'ordine che preferiamo, questo perché quando noi stiamo dichiarando l'oggetto cursore esiste solo all'interno della nostra shell quindi lato client e viene passato alla shell solo nel momento in cui la sua dichiarazione è completa.
+
+Per restare in tema di similitudini con SQL, MongoDB ci offre la funzione count per contare il totale di tutti i documenti che corrispondono alla nostra collezione.
+Ha le stesse proprietà del find, ovvero possiamo inserire un documento vuoto per avere il count di tutti i documenti nella collection: db.users.count()
+Oppure possiamo inserire delle condizioni per contare solo quelli che la soddisfano: db.users.count( { surname:{$exists:true} } )
+
+
+[CRUD - Update: i primi due approcci]
+In questa lezione inizieremo a vedere i 4 approcci dell'update.
+Su mongodb possiamo utilizzare l'update con ben 4 approcci diversi:
+ - una sostituzione completa del documento
+ - un'aggiunta o una modifica di un attributo del documento
+ - un upsert: ovvero la modifica del documento se esiste e la creazione del documento se non esiste, tutto in un'unica operazione
+ - il multi-update
+
+Partiamo dal primo approccio, ovvero la sostituzione completa:
+il metodo update riceve in ingresso due argomenti obbligatori e sono una condizione come quella usata nel find + il nuovo documento, in questo caso mongodb cercherà il primo documento che soddisfi la condizione e lo sostituirà completamente con il documento precisato nell'update, quindi se avessimo 100 attributi e volessimo modificare solo uno, comunque dobbiamo riscrivere tutti gli attributi che compongono il documento.
+db.users.update( {name:"Bobo"}, {name:"Bob", surname:"Rossi", city:"Roma"} )
+L'unico attributo che resterà invariato sarà _id il quale essendo immutabile non può essere sovrascritto.
+Questa pratica è un po' pericolosa, perché se ci dimeticassimo di specificare qualche attributo nel documento durante l'update questi verrebbero persi per sempre.
+Potrebbe essere utile nella programmazione dove di solito si cerca un elemento nel database, lo si modifica nell'applicazione e poi lo si risalva nel database già modificato, ma così facendo non teniamo conto di modifiche concorrenti, quindi a meno che non vi serva questo specifico approccio, vi consiglio di non usarlo.
+
+Abbiamo appurato che il primo approccio della sostituzione completa può essere pericoloso in base al tipo di applicazione, vediamo allora il secondo approccio, quello della modifica di uno specifico attributo.
+
+Ad esempio se noi volessimo modificare solo l'attributo city questa non sarebbe la soluzione migliore, quindi MongoDB ci introduce un nuovo operatore apposito, ovvero $set
+a differenza degli operatori come find dove bisogna specificare prima l'attributo e poi l'operatore come sotto-documento(***2:24) nell'update dobbiamo fare il contrario, ovvero prima indichiamo l'operatore e poi come sotto-documento(***2:30) gli attributi e i valori.
+Questa query cerca un documento con nome Bob e modifica l'attributo city in Milano:
+db.users.update( {name:"Bob"}, {$set:{city:"Milano"}} )
+Se non trova l'attributo indovinate cosa fa? Lo crea, perché è pensato per adattarsi.
+Quindi $set serve sia per aggiungere un nuovo attributo, sia per modificarlo nel caso in cui esista.
+
+Facciamo una prova, inseriamo a Enrico l'età di 24 anni e poi la aggiorniamo a 25
+db.users.update( {name:"Enrico"}, {$set:{eta:24}} )
+db.users.update( {name:"Enrico"}, {$set:{eta:25}} )
+
+è molto efficiente su MongoDB ma ciò presuppone che in alcuni casi noi dobbiamo già conoscere l'attuale valore dell'età prima di modificare il documento.
+MongoDB offre un altro operatore $inc che serve a incrementare o decrementare a step numerici senza dover per forza conoscere il valore attuale
+db.users.update( {name:"Enrico"}, {$inc:{eta:1}} )
+Con l'operatore $inc dobbiamo specificare lo step di incremento
+Come $set, anche $inc è molto versatile, difatti se provassimo a usarlo in un documento che non ha l'attributo età come ad esempio a Carlo, MongoDB lo creerebbe metterebbe come valore lo step del valore incrementale.
+db.users.update( {name:"Carlo"}, {$inc:{eta:1}} )
+
+La spiegazione di questo approccio non sarebbe completa se non facessi vedere anche come ELIMINARE un ATTRIBUTO SPECIFICO, fare l'opposto dell'operatore $set che con molta fantasia hanno chiamato $unset che si applica in maniera leggermente diversa, in quanto non serve specificare il valore dell'attributo da eliminare anche perché non sempre questo lo conosciamo.
+db.users.update( {name:"Enrico"}, {$unset:{eta:1}} )
+dove 1 identifica true(unset=true) non il valore dell'attributo.
+Cercherà un documento con nome uguale a "Enrico", controllerà se esiste l'attributo "eta" e a prescindere dal valore lo eliminerà lasciando invariati gli altri attributi del documento.
+
+[CRUD - Update e gli Array]
+MongoDB offre molti operatori per effettuare modifiche sugli array, cerchiamo di vederli tutti.
+Creiamo una collection in cui utilizzeremo dei valori numerici per rendere più semplice la comprensione:
+ db.arrays.insert( {_id: 0, a:[1,2,3,4]} )
+l'attributo a è di tipo array e come ben sapete gli array hanno un loro indice decimale interno, ovviamente questo è presente anche all'interno di MongoDB.
+ db.arrays.findOne()
+
+ db.arrays.update( {_id:0}, {$set:{"a.2":5}} )
+abbiamo usato il punto come se avessimo voluto accedere a un attributo di un sottodocumento e gli abbiamo settato un nuovo valore. L'indice interno degli array parte da 0, di conseguenza modificando l'elemento con indice 2 abbiamo modificato in realtà il terzo elemento.
+
+Altri operatori specifici per la manipolazione:
+ - $push: per inserire un nuovo elemento in coda all'array tenendo conto dell'ordinamento dell'array
+ db.arrays.update( {_id:0}, {$push:{a:6}} )
+ - $pull: se volessimo eliminare un elemento a prescindere dalla sua posizione possiamo usare $pull in questo caso MongoDB cercherà il valore specificato in tutte le posizioni dell'array, se lo trova lo elimina.
+ db.arrays.update( {_id:0}, {$pull:{a:5}} )
+in questo caso abbiamo eliminato il VALORE 5 (non l'elemento in posizione 5)
+ - $pop: Se volessimo eliminare elementi in base alla propria posizione, come ad esempio i primi e gli ultimi elementi di un array, potremmo usare $pop al quale passiamo il numero degli elementi da eliminare, usandoli in negativo partirebbe dalla fine quindi con -1 eliminerebbe l'ultimo valore dell'array
+per eliminare il primo elemento:  db.arrays.update( {_id:0}, {$pop:{a:-1}} )
+per eliminare l'ultimo elemento:  db.arrays.update( {_id:0}, {$pop:{a:1}} )
+Attenzione, non è un indice bensì un valore di stato: se è positivo elimina l'ultimo elemento, se è negativo elimina il primo.
+ - $pushall: è una variante di push, inserisce nell'array una lista di valori, senza controllare se ci sono doppioni o simili, aggiunge semplicemente in coda la lista degli elementi passati
+ db.arrays.update( {_id:0}, {$pushAll:{a:[5,6,7,8]}} )
+ - $pullall: è una variante di pull, elimina dall'array a prescindere dalla posizione in cui si trovano.
+ db.arrays.update( {_id:0}, {$pushAll:{a:[5,6,7,8]}} )
+ - $addToSet: questo è l'unico operatore che si preoccupa della presenza del valore in un array prima di fare qualcosa, infatti se il valore non è presente nell'array lo aggiunge come se fosse un push, mentre se il valore è già presente non fa assolutamente nulla. Serve per evitare i duplicati negli array.
+
+[CRUD - Update: Upsert e Multi-update]
+In questa lezione vedremo gli ultimi due approcci dell'update
+L'upsert è da considerarsi un'opzione facoltativa della funzione update e ci permette di modificare un elemento anche se non esiste, ovvero viene creato automaticamente e poi viene salvato "modificato".
+
+Visualizziamo la situazione attuale: db.users.find().pretty()
+Se volessimo modificare la città a chi ce l'ha: db.users.update( {name: "Bob"}, {$set:{city:"Venezia"}} )
+
+Se non sapessimo se ha o meno il valore inserito, potrebbe risultare un problema difatti se non dovesse esistere l'attributo da modificare non modificherebbe niente: db.users.update( {name: "Mario"}, {$set:{city:"Venezia"}} )
+
+Allora siamo costretti ad aggiungerlo per poi modificarlo, per non fare due operazioni diverse MongoDB ci propone un'opzione facoltativa di update() che si chiama upsert da inserire come terzo argomento:
+ db.users.update( {name:"Mario"}, {$set:{city:"Venezia"}}, {upsert:true} )
+in questo modo stiamo dicendo a MongoDB: se non dovessi trovare nessun documento che corrisponda alla condizione, crealo e applica la modifica.
+
+L'upsert in fase di creazione(se nessun documento corrisponde alla condizione di ricerca), ha potuto inserire i nostri attributi perché abbiamo specificato un valore CONCRETO(nome:"Mario", city:"Venezia"), se noi nella nostra condizione avessimo inserito un intervallo(es. usando $gt o $lt), MongoDB avrebbe comunque effettuato l'upsert ma senza inserire un nome perché non sarebbe stato un valore completo:
+ db.users.update( {city:{$gt: "R"}}, {$set:{name:"Romolo"}}, {upsert:true} )
+
+
+Su MongoDB quando applichiamo un update esso viene effettuato su un solo documento, come se avesse il limite di 1, se avessimo voluto modificare più di un documento avremmo dovuto aggiungere un'opzione detta multi:true
+Questa è una grande differenza tra i database relazionali e MongoDB perché su MongoDB l'update di default modifica solo 1 documento, se invece vogliamo che ne modifichi più di uno dobbiamo specificarlo noi durante la query
+ - situazione attuale: db.users.find()
+ - modifica solo il primo documento che rispetta la condizione: db.users.update( {city:{$exists:false}}, {$set:{city:"Avellino"}} )
+ - modifica di tutti i documenti che rispettano la condizione:  db.users.update( {city:{$exists:false}}, {$set:{city:"Avellino"}}, {multi:true} )
+ - per applicare una modifica a tutti i documenti indistintamente ci basterà mettere semplicemente mettere come condizione un documento vuoto, aggiungendo un attributo prima inesistente:  db.users.update( {city:{}}, {$set:{job:"student"}}, {upsert:true, multi:true} )
+
+In qualche driver vi potrà anche capitare di trovare l'update e il multi-update come due funzioni diverse, ma in realtà sappiate che non è così.
+
+[CRUD - Remove e Drop: Eliminare i Documenti]
+MongoDB ci da a disposizione due funzioni diverse per eliminare i documenti: remove() e drop()
+remove() è simile al find(), infatti possiamo specificare delle condizioni per i documenti da eliminare
+es. db.users.remove({ name:{$gt:"B"} })
+Ovviamente è già predisposto per eliminare più documenti, quindi non ha limitazioni come l'update.
+Per rimuovere tutti gli elementi di una collection si può usare il remove con un documento vuoto: db.users.remove({ })
+Bisogna precisare che il remove elimina un documento alla volta, con pochi documenti risulta velocissimo e non ci accorgiamo di nulla, ma se avessimo una collection molto grande per eliminare tutti i documenti noteremmo l'attesa.
+
+Per eliminare in maniera più efficiente intere collezioni, si usa drop() che elimina tutto in blocco senza condizioni.
+La differenza tra drop e remove sta nella velocità di esecuzione, per esempio se volessimo usare 10.000 documenti usando il metodo remove noi sappiamo che questo li eliminerebbe uno alla volta, creando una coda/lista di documenti da eliminare e questi documenti mentre sono in coda possono comunque ricevere accessi di lettura o scrittura da parte del database! Diversamente il metodo drop elimina completamente in blocco la collection operando direttamente sui files del database, ma con il drop non possiamo inserire delle condizioni, elimina tutta la collection, quindi dobbiamo utilizzarli in base alle nostre esigenze.
+
+____
+a cura di Alberto Olla
+trascrizioni e aggiunte a cura di AccaEmme
+
+____
+da vedere anche:
+
+https://www.youtube.com/watch?v=cdhKOTwkoxQ
+https://www.youtube.com/watch?v=r0em6qZmYhM
